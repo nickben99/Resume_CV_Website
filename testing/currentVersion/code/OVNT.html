@@ -1,0 +1,314 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+	<title>O.V.N.T</title>
+    <style>
+		#myCanvas {
+			border: 1px solid #9C9898;
+		}
+    </style>
+	
+	<!--  per vertex lighting -->
+	<script id="vert-shader-fs" type="x-shader/x-fragment">	
+		precision mediump float;		
+
+		uniform sampler2D uSampler;		
+		uniform bool uUseTexture;
+		
+		varying vec2 vTextureCoord;
+		varying vec4 vColor;
+		varying vec3 vLightWeighting;
+		
+		void main(void) {
+			vec4 finalColor;
+			if (uUseTexture)
+			{
+				finalColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+			}
+			else
+			{
+				finalColor = vColor;
+			}
+			vec4(finalColor.rgb * vLightWeighting, finalColor.a);
+		}
+	</script>
+
+	<script id="vert-shader-vs" type="x-shader/x-vertex">
+	    attribute vec3 aVertexPosition;
+		attribute vec4 aVertexColor;
+		attribute vec2 aTextureCoord;
+		attribute vec3 aVertexNormal;
+
+		uniform mat4 uMVMatrix;
+		uniform mat4 uPMatrix;
+		uniform mat3 uNMatrix;
+		
+		uniform vec3 uAmbientColor;
+
+		uniform vec3 uPointLightingLocation;
+		uniform vec3 uPointLightingDiffuseColor;
+
+		uniform bool uUseLighting;		
+
+		varying vec4 vColor;
+		varying vec2 vTextureCoord;
+		varying vec3 vLightWeighting;
+		
+		void main(void) {
+			vec4 mvPosition = uMVMatrix * vec4(aVertexPosition, 1.0);
+			gl_Position = uPMatrix * mvPosition;
+			vTextureCoord = aTextureCoord;
+			vColor = aVertexColor;
+
+			if (!uUseLighting) {
+				vLightWeighting = vec3(1.0, 1.0, 1.0);
+			} else {
+				vec3 lightDirection = normalize(uPointLightingLocation - mvPosition.xyz);
+
+				vec3 transformedNormal = uNMatrix * aVertexNormal;
+				float directionalLightWeighting = max(dot(transformedNormal, lightDirection), 0.0);
+				vLightWeighting = uAmbientColor + uPointLightingDiffuseColor * directionalLightWeighting;
+			}
+		}
+	</script>	
+
+	<!--  per fragment lightng -->
+	<script id="frag-shader-fs" type="x-shader/x-fragment">	
+		precision mediump float;
+
+		varying vec2 vTextureCoord;
+		varying vec3 vTransformedNormal;
+		varying vec4 vPosition;
+		varying vec4 vColor;
+
+		uniform bool uUseLighting;
+		uniform bool uUseTexture;
+		
+		uniform float uMaterialShininess;
+		uniform bool uShowSpecularHighlights;
+
+		uniform vec3 uAmbientColor;
+
+		uniform vec3 uPointLightingLocation;
+		uniform vec3 uPointLightingSpecularColor;
+		uniform vec3 uPointLightingDiffuseColor;
+		
+		uniform sampler2D uSampler;
+		
+		void main(void) {
+			vec3 lightWeighting;
+			if (!uUseLighting) {
+				lightWeighting = vec3(1.0, 1.0, 1.0);
+			} else {
+				vec3 lightDirection = normalize(uPointLightingLocation - vPosition.xyz);
+				vec3 normal = normalize(vTransformedNormal);
+
+				float specularLightWeighting = 0.0;
+				if (uShowSpecularHighlights) {
+					vec3 eyeDirection = normalize(-vPosition.xyz); // this is because the camera doesn't move, the world moves away from the camera
+					vec3 reflectionDirection = reflect(-lightDirection, normal);
+
+					specularLightWeighting = pow(max(dot(reflectionDirection, eyeDirection), 0.0), uMaterialShininess);
+				}
+
+				float diffuseLightWeighting = max(dot(normal, lightDirection), 0.0);
+				lightWeighting = uAmbientColor
+					+ uPointLightingSpecularColor * specularLightWeighting
+					+ uPointLightingDiffuseColor * diffuseLightWeighting;
+			}
+
+			vec4 fragmentColor;
+			if (uUseTexture) {
+				fragmentColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+			} else {
+				fragmentColor = vColor;
+			}
+			gl_FragColor = vec4(fragmentColor.rgb * lightWeighting, fragmentColor.a);
+		}
+	</script>
+
+	<script id="frag-shader-vs" type="x-shader/x-vertex">
+		attribute vec3 aVertexPosition;
+		attribute vec3 aVertexNormal;
+		attribute vec2 aTextureCoord;
+		attribute vec4 aVertexColor;
+
+		uniform mat4 uMVMatrix;
+		uniform mat4 uPMatrix;
+		uniform mat3 uNMatrix;
+
+		varying vec2 vTextureCoord;
+		varying vec3 vTransformedNormal;
+		varying vec4 vPosition;
+		varying vec4 vColor;
+
+		void main(void) {
+			vPosition = uMVMatrix * vec4(aVertexPosition, 1.0);
+			gl_Position = uPMatrix * vPosition;
+			vTextureCoord = aTextureCoord;
+			vColor = aVertexColor;
+			vTransformedNormal = uNMatrix * aVertexNormal;
+		}	
+	</script>	
+	
+    <script>
+		var ovnt = {};
+		
+		window.requestAnimFrame = (function(callback) {
+			return window.requestAnimationFrame || 
+			window.webkitRequestAnimationFrame || 
+			window.mozRequestAnimationFrame || 
+			window.oRequestAnimationFrame || 
+			window.msRequestAnimationFrame ||
+				function(callback) {
+					window.setTimeout(callback, 1000 / 60);
+				};
+		})();
+    </script>
+	<script src="glMatrix-0.9.5.min.js"></script>
+	<script src="vec3.js"></script>
+	<script src="mat3.js"></script>
+	<script src="mat4.js"></script>
+	<script src="quat4.js"></script>
+	<script src="Texture.js"></script>
+	<script src="GL.js"></script>
+	<script src="Sprite.js"></script>
+	<script src="TriangleModel.js"></script>
+	<script src="CubeModel.js"></script>
+	<script src="Model.js"></script>
+	<script src="TextFileReader.js"></script>
+	<script src="ModelLoader.js"></script>
+  </head>
+  <body>
+  
+  	<script>
+			
+		ovnt.myLog = function(msg)
+		{
+			// attempt to send a message to the console
+			try
+			{
+				console.log(msg);
+			}
+			// fail gracefully if it does not exist
+			catch(e){}
+		}
+	        
+		function Tick(frameData) {	
+			frameData.webgl.gl.viewport(0, 0, frameData.webgl.gl.viewportWidth, frameData.webgl.gl.viewportHeight);
+			frameData.webgl.gl.clear(frameData.webgl.gl.COLOR_BUFFER_BIT | frameData.webgl.gl.DEPTH_BUFFER_BIT);
+
+			mat4.perspective(45, frameData.webgl.gl.viewportWidth / frameData.webgl.gl.viewportHeight, 0.1, 5000.0, frameData.webgl.pMatrix);
+			
+			frameData.webgl.gl.uniform3f(frameData.webgl.shaderProgram.ambientColorUniform, 0.3, 0.3, 0.3);
+            frameData.webgl.gl.uniform3f(frameData.webgl.shaderProgram.pointLightingLocationUniform, (frameData.canvas.width*0.5), 0.0, -550.0);
+            frameData.webgl.gl.uniform3f(frameData.webgl.shaderProgram.pointLightingSpecularColorUniform, 1.0, 1.0, 1.0);
+			frameData.webgl.gl.uniform3f(frameData.webgl.shaderProgram.pointLightingDiffuseColorUniform, 0.3, 0.3, 0.3);
+			        		
+			mat4.identity(frameData.webgl.mvMatrix);
+			mat4.translate(frameData.webgl.mvMatrix, [0.0, 0.0, -550.0]); // set the camera
+			
+			for (var count = 0; count < frameData.aSprites.length; ++count)
+			{
+				frameData.aSprites[count].tick(frameData);
+				frameData.aSprites[count].draw(frameData);
+			}
+		
+			window.requestAnimFrame(function() {
+				Tick(frameData);
+			});
+		}
+	
+		
+		function getMousePos(canvas, evt) {
+			var rect = canvas.getBoundingClientRect(), 
+				root = document.documentElement;
+
+			// return relative mouse position
+			var mouseX = evt.clientX - rect.top - root.scrollTop;
+			var mouseY = evt.clientY - rect.left - root.scrollLeft;
+			return {
+				x: mouseX,
+				y: mouseY
+			};
+		}
+				
+		window.onload = function() 
+		{
+			var canvas = document.getElementById('myCanvas');
+			ovnt.webgl = new ovnt.GL(canvas);
+			var webgl = ovnt.webgl;
+			webgl.init(canvas);
+			
+			ovnt.texLoad = new ovnt.Texture();
+			
+			var maxSprites = 7;
+			var aSprites = [];
+			var theTriangleModel = new ovnt.TriangleModel(webgl.gl, webgl.shaderProgram);
+			var theCubeModelRed = new ovnt.CubeModel(webgl, webgl.shaderProgram, "../images/redbrick.bmp");
+			var theCubeModelIce = new ovnt.CubeModel(webgl, webgl.shaderProgram, "../models/modeltextures/iceChess.bmp");
+			var theNebulusModel = ModelLoader.load(webgl, "nebulus");
+			for (var count = 0; count < maxSprites; ++count)
+			{
+				var theModel = theNebulusModel;
+				if (count > maxSprites*0.65)
+				{
+					theModel = theCubeModelIce;
+				}
+				else if (count > maxSprites*0.35)
+				{
+					theModel = theTriangleModel;
+				}
+				else if (count > 0)
+				{
+					theModel = theCubeModelRed;
+				}				
+				
+				if (maxSprites == 1) // avoid divide by 0
+				{
+					aSprites[aSprites.length] = new ovnt.Sprite( -webgl.gl.viewportWidth*0.5, webgl.gl.viewportHeight*0.5, theModel );
+				}
+				else
+				{
+					var xPos = -(webgl.gl.viewportWidth*0.5) + webgl.gl.viewportWidth * (count / (maxSprites-1));
+					var yPos = (webgl.gl.viewportHeight*0.5) - webgl.gl.viewportHeight * (count / (maxSprites-1));
+					aSprites[aSprites.length] = new ovnt.Sprite( xPos, yPos, theModel );
+				}
+			}
+						
+			var keysDown = {};
+			var mouseDown = {};
+
+			// add a listener so we can monitor where the mouse is
+			canvas.addEventListener('mousemove', function(evt) {
+				frameData.mousePos = getMousePos(canvas, evt);
+			}, false);
+			
+			document.getElementById("myCanvas").onmousedown = function(evt) { 
+				mouseDown[evt.button] = true;
+			}
+			document.getElementById("myCanvas").onmouseup = function(evt) {
+				mouseDown[evt.button] = false;
+			}
+					
+			document.onkeydown = function(e) 
+			{
+				keysDown[e.keyCode] = true;
+			};
+			
+			document.onkeyup = function(e) 
+			{
+				keysDown[e.keyCode] = false;
+			};	
+        				
+			var frameData = { aSprites: aSprites, keysDown: keysDown, 
+							mouseDown: mouseDown, mousePos: {x: 0, y: 0}, canvas: canvas, webgl: webgl }
+			Tick(frameData);
+		};
+		
+	</script>
+	
+	<canvas id="myCanvas" width="512" height="384"></canvas>
+	
+  </body>
+</html>
